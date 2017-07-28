@@ -9,6 +9,10 @@
 FP_LESSTHAN	equ 01h
 FP_EQUALTO	equ 40h
 
+MAXNUM equ 16
+
+CONST segment
+
 ten		dq 10.0
 ten16	dq 1.0e16
 ;rounder	dq 5.0e10
@@ -67,7 +71,11 @@ ten_256	dt 1.0e256
 	dt 1.0e4608
 	dt 1.0e4864
 
+CONST ends
+
 	.8086
+
+_TEXT segment
 
 ;--- called by FloatToStr
 ;--- in: ax=xxx
@@ -76,7 +84,7 @@ ten_256	dt 1.0e256
 PowerOf10 proc uses si
 
 	push ax
-	cmp ax, 0		;.IF (SWORD PTR eax < 0)
+	cmp ax, 0		;.IF (SWORD PTR ax < 0)
 	jge @F
 	neg ax
 @@:
@@ -177,7 +185,7 @@ FloatToBCD ENDP
 ;
 ; pszDbl should be at least 19 bytes long.
 
-FloatToStr PROC stdcall public USES si di pfpin: ptr TBYTE, pszDbl: PTR BYTE
+FloatToStr PROC stdcall USES si di pfpin: ptr TBYTE, pszDbl: PTR BYTE
 
 LOCAL iExp: WORD
 LOCAL mystat: WORD
@@ -245,7 +253,7 @@ local szTemp[22]:BYTE
 	call FloatToBCD
 	pop di
 
-	mov ax, 16+1
+	mov ax, MAXNUM+1
 	mov cx, [iExp]
 	sub ax, cx
 	inc cx
@@ -271,7 +279,7 @@ notbelow18:
 
 ;--- Have fbstp round to 17 places.
 
-	mov ax, 16			; experiment
+	mov ax, MAXNUM
 	sub ax, [iExp]		; adjust exponent to 17
 	call PowerOf10
 
@@ -304,8 +312,8 @@ notbelow18:
 
 	mov cx, [iExp]
 	push cx
-	add cx,15
-	cmp cx,15+16
+	add cx,MAXNUM-1
+	cmp cx,MAXNUM*2-1
 	pop cx
 	ja fts6		;if scientific notation
 
@@ -322,13 +330,13 @@ notbelow18:
 	neg cx
 	mov al, '0'
 	rep stosb
-	mov cx, 16
+	mov cx, MAXNUM
 	jmp fts3
 @@:
 	rep movsb
 	mov al,'.'
 	stosb
-	mov cx, 16
+	mov cx, MAXNUM
 	sub cx, [iExp]
 fts3:
 	rep movsb
@@ -423,3 +431,4 @@ endif
 
 FloatToStr ENDP
 
+_TEXT ends

@@ -8,14 +8,6 @@ CR  equ 13
     .286
     .model tiny
 
-    .data
-
-szWelcome db "welcome in protected-mode",CR,LF,0
-
-dErr1 db "no DPMI host installed",CR,LF,'$'
-dErr2 db "not enough DOS memory for initialisation",CR,LF,'$'
-dErr3 db "DPMI initialisation failed",CR,LF,'$'
-
     .code
 
     org 100h
@@ -52,22 +44,24 @@ nomemneeded:
 
 ;--- now in protected-mode
 
-    mov si, offset szWelcome
     call printstring
+    db "welcome in protected-mode",CR,LF,0
     mov ax, 4C00h   ;normal client exit
     int 21h
 
 nohost:
-    mov dx, offset dErr1
-    jmp error
+    call error
+    db "no DPMI host installed",CR,LF,'$'
 nomem:
-    mov dx, offset dErr2
-    jmp error
+    call error
+    db "not enough DOS memory for initialisation",CR,LF,'$'
 initfailed:
-    mov dx, offset dErr3
+    call error
+    db "DPMI initialisation failed",CR,LF,'$'
 error:
     push cs
     pop ds
+    pop dx
     mov ah, 9
     int 21h
     mov ax, 4C00h
@@ -77,14 +71,17 @@ error:
 ;--- DOS commands not using pointers.
 
 printstring:
+    pop si
+nextchar:
     lodsb
     and al,al
     jz stringdone
     mov dl,al
     mov ah,2
     int 21h
-    jmp printstring
+    jmp nextchar
 stringdone:
+    push si
     ret
 
     end start

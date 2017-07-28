@@ -836,8 +836,6 @@ void dumptables(FILE *f2)
 	 * Print out oplists[]
 	 */
 
-	fprintf(f2, "\nOPTYPES_BASE\tEQU 0%Xh\n", OPTYPES);
-
 	fputs( "\n;--- Operand type lists.\n"
 		  ";--- They were read from file INSTR.KEY.\n\n"
 		  "oplists label byte\n\topl\t;void - for instructions without operands\n", f2);
@@ -890,7 +888,7 @@ void dumptables(FILE *f2)
 		  ";---   if a >= 0x200 && a < 0x240: fp instruction.\n"
 		  ";---   if a >= 0x240: refers to agroups [macro AGRP() is used].\n"
 		  ";--- variant's 2. argument is index into array opindex.\n\n"
-		  "mnlist label near\n", f2);
+		  "mnlist label byte\n", f2);
 	for (mnp = mnhead, offset = 0; mnp != NULL; mnp = mnp->next) {
 		mnp->offset = offset + 2;
 		offset += mnp->len + 2;
@@ -972,7 +970,7 @@ void dumptables(FILE *f2)
 		}
 
 	}
-	fputs( "\nend_mnlist label near\n\n", f2);
+	fputs( "\nend_mnlist label byte\n\n", f2);
 
 	if (offset >= (1 << MSHIFT)) {
 		fprintf(stderr, "%d bytes of mnemonics.  That's too many.\n", offset);
@@ -1030,6 +1028,9 @@ void dumptables(FILE *f2)
 		}
 		auxstr = "\n\tdb ";
 	}
+
+	fprintf(f2, "SPARSE_BASE\tequ $ - optypes\n");
+
 	auxstr = "\n;--- The rest of these are squeezed.\n" "\tdb      0,";
 	for (i = SPARSE_BASE, k=1; i < NOPS; ++i)
 		if ((j = optype[i]) != 0) {
@@ -1062,6 +1063,8 @@ void dumptables(FILE *f2)
 	fputs("\n", f2);
 	for (i = 1; i < 7; i++)
 		fprintf(f2, "P%u86\tequ %Xh\n", i, i << MSHIFT );
+
+	fputs( "\n\talign 2\n", f2 );
 
 	fputs( "\n;--- Disassembler: compressed table of additional information."
 		   "\n;--- Bits 0-11 usually are the offset of the mnemonics table."
@@ -1107,10 +1110,18 @@ void dumptables(FILE *f2)
 	 */
 
 	fputs( "\n;--- Disassembler: table converts unsqueezed numbers to squeezed."
+		  "\n;--- 1E0-2DF are extended opcodes (0F xx).\n"
 		  "\n\nsqztab label byte\n", f2);
 
 	k = 0;
 	for (i = SPARSE_BASE; i < NOPS; i += 8) {
+		if ( i == SPARSE_BASE + 256 )
+			fprintf(f2, "\n--- %u sparse groups\n\n", NSGROUPS );
+		else if ( i == SPARSE_BASE + 256 + 8 * NSGROUPS ) {
+			fprintf(f2, "\n--- %u sparse fpu groups\n\n", NUMBER(sp_fpgrouptab) );
+			fprintf(f2, "SFPGROUPS equ SPARSE_BASE + ( $ - sqztab )\n" );
+			fprintf(f2, "SFPGROUP3 equ SFPGROUPS + 8 * 3\n" );
+		}
 		auxstr = "\tdb ";
 		for (j = 0; j < 8; ++j) {
 			fprintf(f2, "%s%3d", auxstr, optype[i + j] == 0 ? 0 : ++k);
@@ -1169,13 +1180,6 @@ void dumptables(FILE *f2)
 	put_dw(f2, "locktab label word\n", locktab, n_locktab);
 	fprintf( f2, "N_LOCK\tequ ($ - locktab) / 2\n" );
 
-	/*
-	 * Print out miscellaneous equates.
-	 */
-
-	fprintf(f2, "\n;--- Equates used in the assembly-language code.\n\n"
-			"SPARSE_BASE\tequ 0%xh\n"
-			"SFPGROUP3\tequ 0%xh\n\n", SPARSE_BASE, SFPGROUP(3));
 }
 
 int cdecl main()
