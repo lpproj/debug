@@ -50,6 +50,15 @@
 ;       - allow to modify floating point registers
 ;       - better syntax checks for A (so i.e. "mov ax,al" is rejected)
 
+;--- check the target
+ifndef GENERIC
+  ifndef IBMPC
+    ifndef NEC98
+	.err You should define the target platform: either IBMPC, NEC98 or GENERIC.
+    endif
+  endif
+endif
+
 	option casemap:none
 	option proc:private
 ;	option noljmp	;enable to see the short jump extensions
@@ -126,6 +135,11 @@ PARENT	equ 16h	;segment of parent PSP
 SPSAV	equ 2eh	;Save the stack pointer here
 DTA		equ 80h	;Program arguments; also used to store file name (N cmd)
 endif
+
+;--- int 2Fh wrapper
+invoke_int2f macro
+	call [int2f_hopper]
+	endm
 
 ;--- mne macro, used for the assembler mnemonics table
 
@@ -229,12 +243,6 @@ endif
 	.8086
 
 _TEXT segment dword public 'CODE'
-if DRIVER
-	dd -1
-	dw 08000h					; driver flags : character dev
-Strat  dw offset strategy		; offset to strategy routine
-Intrp  dw offset driver_entry	; offset to interrupt handler
-device_name db 'DEBUG$RR'		; device driver name
 
 req_hdr struct
 req_size db ?	;+0 number of bytes stored
@@ -243,6 +251,13 @@ cmd 	 db ?	;+2 command code
 status	 dw ?	;+3 status word
 rsvd     db 8 dup(?);+5 reserved
 req_hdr ends
+
+if DRIVER
+	dd -1
+	dw 08000h					; driver flags : character dev
+Strat  dw offset strategy		; offset to strategy routine
+Intrp  dw offset driver_entry	; offset to interrupt handler
+device_name db 'DEBUG$RR'		; device driver name
 
 request_ptr dd 0
 
@@ -462,6 +477,28 @@ csip    dd ?	;+18 initial CS:IP
 EXECS ends
 
 execblk	EXECS {0,0,5ch,6ch,0,0}
+
+ifdef GENERIC
+CON_header      dd ?
+CON_strategy    dd ?
+CON_interrupt   dd ?
+con_reqhdr	req_hdr <>
+		db ?	; media ID
+con_addr	dd ?
+con_count	dw ?
+		dw ?
+		dd ?
+endif
+dos_version     dw ?	; upper = major, lower = minor
+int2f_hopper	dw offset int2f_caller
+ifdef NEC98
+;-- check machine (PC) type
+;     0   not checked
+;     1   common PC (IBM PC and all compatibles)
+;     2   NEC PC-9801/9821
+;     3   Fujitst FMR (not supported)
+pc_type db 0
+endif ;NEC98
 
 REGS struct
 rDI		dw ?,?	;+00 edi
@@ -1344,6 +1381,13 @@ i24pm:
 
 endif	;PM
 
+;--- int 2Fh wrappr 
+int2f_caller:
+	int 2Fh
+int2f_dummy:	; dummy for DOS 2.x
+	ret
+
+
 ;   intr22 - INT 22 (Program terminate) interrupt handler.
 ;   This is for DEBUG itself:  it's a catch-all for the various INT 23
 ;   and INT 24 calls that may occur unpredictably at any time.
@@ -1432,12 +1476,14 @@ waitkey proc
 	jnz nowait
 	test [stdoutf],80h	;is stdout a device?
 	jz nowait
+ifdef IBMPC
 	push es
 	mov ax,40h		;0040h is a bimodal segment/selector
 	mov es,ax
 	cmp byte ptr es:[84h],30
 	pop es
 	jnc nowait
+endif ;IBMPC
 	mov dx,offset presskey
 	mov cx,sizeof presskey
 	call stdout
@@ -5051,7 +5097,7 @@ isextenderavailable proc
 	sizeprf		;lea esi, szMSDOS
 	lea si, szMSDOS	;must be LEA, don't change to "mov si,offset szMSDOS"!
 	mov ax,168ah
-	int 2Fh
+	invoke_int2f	;int 2Fh
 	cmp al,1
 	cmc
 	popa
@@ -7762,7 +7808,7 @@ endif
 if CATCHINT0C
 NotOurInt0C:
 	jmp cs:[oldi0C]
-intr0C:
+intr0C:				;(IBMPC)
 	push ax
 	mov al, 0Bh		; get ISR mask from PIC
 	out 20h, al
@@ -7777,7 +7823,7 @@ endif
 if CATCHINT0D
 NotOurInt0D:
 	jmp cs:[oldi0D]
-intr0D:
+intr0D:				;(IBMPC)
 	push ax
 	mov al, 0Bh		; get ISR mask from PIC
 	out 20h, al
@@ -7863,7 +7909,7 @@ intrtn1::		;<--- entry for int 22
 
 if ?PM
 	mov ax,1686h
-	int 2Fh
+	invoke_int2f	;int 2Fh
 	cmp ax,1
 	sbb ax,ax
 	mov [regs.msw],ax	;0000=real-mode, FFFF=protected-mode
@@ -8238,12 +8284,33 @@ rawinput:
 	inc dx
 	mov di,dx
 rawnext:
+ifdef GENERIC
+	call stdin_d
+endif ;GENERIC
+ifdef NEC98
+	cmp byte ptr [pc_type], 2
+	jne rawinput_ibmpc
+	mov ah,05h
+	push bx
+	int 16h			;(NEC98)
+	test bh,1
+	pop bx
+	jz rawnext
+	cmp al,0
+	jz rawnext
+rawinput_ibmpc:
+endif ;NEC98
+ifdef IBMPC
 	mov ah,00h
 	int 16h
 	cmp al,0
 	jz rawnext
 	cmp al,0E0h
 	jz rawnext
+endif ;IBMPC
+ifdef NEC98
+@@:
+endif ;NEC98
 	cmp al,08h
 	jz del_key
 	cmp al,7Fh
@@ -11231,14 +11298,58 @@ stdout proc			;write DS:DX, size CX to STDOUT (1)
 	mov si,dx
 @@:
 	lodsb
+ifdef IBMPC
 	mov bx,0007
 	mov ah,0Eh
 	int 10h
+else
+	int 29h
+endif ;IBMPC
 	loop @B
 	pop si
 nooutput:
 	ret
 stdout endp
+
+ifdef GENERIC
+stdin_d proc near
+	cmp word ptr [CON_interrupt], 0
+	jne stdin_ddev
+	mov ah,8
+	int 21h
+	ret
+stdin_ddev:
+	pushf
+	push bx
+	push cx
+	push dx
+	push si
+	push di
+	push bp
+	push es
+	push ds
+	pop es
+	push ax
+	mov bx,offset con_reqhdr
+	mov con_reqhdr.req_size,SIZE req_hdr
+	mov con_reqhdr.cmd,4
+	mov [con_count],1
+	mov word ptr [con_addr],sp
+	mov word ptr [con_addr+2],ss
+	call [CON_strategy]
+	call [CON_interrupt]
+	pop ax
+	pop es
+	pop bp
+	pop di
+	pop si
+	pop dx
+	pop cx
+	pop bx
+	popf
+	ret
+stdin_d endp
+endif
 
 if DRIVER eq 0
 createdummytask proc
@@ -11332,7 +11443,7 @@ hook2f proc
 	cmp word ptr [oldi2f+2],0
 	jnz hook2f_2
 	mov ax,1687h			;DPMI host installed?
-	int 2Fh
+	invoke_int2f	;int 2Fh
 	and ax,ax
 	jnz hook2f_2
 	mov word ptr [dpmientry+0],di	;true host DPMI entry
@@ -11394,6 +11505,79 @@ _DATA ends
 
 _ITEXT segment
 
+ifdef GENERIC
+find_condev     proc near
+	push bx
+	push cx
+	push si
+	push di
+	push ds
+	push es
+	mov ah,52h
+	int 21h
+	mov ax, [dos_version]
+	cmp ah,3
+	jae @f
+	add bx,17h
+	jmp short fcd_chain
+@@:
+	cmp ax,0300h
+	jne @f
+	add bx,28h
+	jmp short fcd_chain
+@@:
+	add bx,22h
+fcd_chain:
+	test word ptr es:[bx+4],8000h
+	jz fcd_next
+	lea di,[bx+10]
+	mov si,offset con_devname
+	push ds
+	push cs
+	pop ds
+	mov cx, 8
+	repe cmpsb
+	pop ds
+	je fcd_find
+fcd_next:
+	les bx,dword ptr es:[bx]
+	cmp bx,0ffffh
+	jne fcd_chain
+fcd_error:
+	stc
+	jmp short fcd_exit
+fcd_find:
+	mov word ptr [CON_header], bx
+	mov word ptr [CON_header+2], es
+	mov ax,word ptr es:[bx+6]
+	; avoid some DOS emulators (e.g. DOSBox...)
+	cmp ax,0ffffh
+	je fcd_error
+	test ax,ax
+	jz fcd_error
+	mov word ptr [CON_strategy], ax
+	mov word ptr [CON_strategy+2], es
+	mov ax,word ptr es:[bx+8]
+	cmp ax,0ffffh
+	je fcd_error
+	test ax,ax
+	jz fcd_error
+	mov word ptr [CON_interrupt], ax
+	mov word ptr [CON_interrupt+2], es
+	clc
+fcd_exit:
+	pop es
+	pop ds
+	pop di
+	pop si
+	pop cx
+	pop bx
+	ret
+con_devname: db 'CON     '
+find_condev     endp
+
+endif ; GENERIC
+
 if DRIVER eq 0
 
 initcont:
@@ -11413,7 +11597,17 @@ endif
 ;--- Debug initialization code.
 ;---------------------------------------
 
-imsg1	db DBGNAME,' version 1.25.  Debugger.',CR,LF,CR,LF
+imsg1	db DBGNAME,' version 1.25p1.  Debugger.'
+ifdef IBMPC
+	db ' (for IBMPC)'
+endif
+ifdef NEC98
+	db ' (for NEC PC-98)'
+endif
+ifdef GENERIC
+	db ' (DOS generic)'
+endif
+	db CR,LF,CR,LF
 	db 'Usage: ', DBGNAME, ' [[drive:][path]progname [arglist]]',CR,LF,CR,LF
 	db '  progname (executable) file to debug or examine',CR,LF
 	db '  arglist parameters given to program',CR,LF,CR,LF
@@ -11532,11 +11726,31 @@ endif
 	mov [stdoutf],dl
 @@:
 
+;--- Check PC type
+ifdef NEC98
+	push ds
+	mov ax, 0ffffh
+	mov ds, ax
+	cmp word ptr ds:[3], 0fd80h	; (FFFF0 jmp FD80:0000)
+	jne @F
+	mov byte ptr cs:[pc_type], 2
+	jmp short init_chkpc_e
+@@:
+	mov byte ptr cs:[pc_type], 1
+init_chkpc_e:
+	pop ds
+endif
+
 ;--- Check DOS version
 
 	mov ax,3000h	;check DOS version
 	int 21h
 	xchg al,ah
+	mov [dos_version], ax
+	cmp ah,2
+	ja @F			;if version < 3 then don't call int 2Fh
+	mov [int2f_hopper], offset int2f_dummy
+@@:
 	cmp ax,31fh
 	jb init2		;if version < 3.3, then don't use new INT 25h method
 	inc [usepacket]
@@ -11575,6 +11789,9 @@ isntordos71:
 ;   Probably the 186 as well.
 
 init2:
+ifdef GENERIC
+	call find_condev
+endif
 	push sp
 	pop ax
 	cmp ax,sp		
@@ -11862,7 +12079,7 @@ if ?PM
 
 if WIN9XSUPP
 	mov ax,1600h	;running in a win9x dos box?
-	int 2Fh
+	invoke_int2f	;int 2Fh
 	and al,al
 	jnz no2fhook
 endif
