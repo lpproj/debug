@@ -1,0 +1,95 @@
+# makefile for OpenWatcom's wmake
+
+!ifdef __UNIX__
+P = / 
+
+O = o
+A = a
+RM_F = rm
+MKDIR_P = mkdir -p
+!else
+P = \ 
+
+O = obj
+A = lib
+RM_F = rm
+MKDIR_P = md
+!endif
+
+AS = jwasm
+ASFLAGS = -c -nologo -I.
+
+INCS = debugtbl.inc fptostr.inc
+
+AS2 = -Fo $^@ -Fl=$^*.lst $[@
+
+.before:
+	-$(MKDIR_P) ibmpc
+	-$(MKDIR_P) nec98
+	-$(MKDIR_P) generic
+
+
+all: generic  .SYMBOLIC
+
+all-targets: generic nec98 ibmpc_extra  .SYMBOLIC
+
+clean:  .SYMBOLIC
+	-$(RM_F) debug*.exe debug*.com debug*.lst debug*.err debug*.$(O)
+	-$(RM_F) nec98$(P)debug*.*
+	-$(RM_F) generic$(P)debug*.*
+	-$(RM_F) ibmpc$(P)debug*.*
+
+
+nec98: nec98$(P)debug.com nec98$(P)debugx.com  .SYMBOLIC
+
+generic: generic$(P)debug.com generic$(P)debugx.com  .SYMBOLIC
+
+ibmpc: ibmpc$(P)debug.com ibmpc$(P)debugx.com  .SYMBOLIC
+
+ibmpc_extra: ibmpc ibmpc$(P)debugxd.com ibmpc$(P)debugxe.com ibmpc$(P)debugxf.com ibmpc$(P)debugxg.exe  .SYMBOLIC 
+
+
+#
+
+generic$(P)debug.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DGENERIC "-D?PM=0" $(AS2)
+
+generic$(P)debugx.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DGENERIC "-D?PM=1" $(AS2)
+
+
+#
+
+nec98$(P)debug.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DNEC98 "-D?PM=0" $(AS2)
+
+nec98$(P)debugx.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DNEC98 "-D?PM=1" $(AS2)
+
+nec98$(P)debugxg.exe: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -mz -DNEC98 "-D?PM=1" -DCATCHINT06=0 -DDRIVER=1 $(AS2)
+
+
+#
+
+ibmpc$(P)debug.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DIBMPC "-D?PM=0" $(AS2)
+
+ibmpc$(P)debugx.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DIBMPC "-D?PM=1" $(AS2)
+
+
+ibmpc$(P)debugxd.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DIBMPC "-D?PM=1" -DCATCHINT01=0 -DCATCHINT03=0 $(AS2)
+
+ibmpc$(P)debugxe.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DIBMPC "-D?PM=1" -DCATCHINT06=1 -DCATCHINT0C=1 -DCATCHINT0D=1 $(AS2)
+
+ibmpc$(P)debugxf.com: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -bin -DIBMPC "-D?PM=1" -DCATCHINT31=1 $(AS2)
+
+ibmpc$(P)debugxg.exe: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -mz -DIBMPC "-D?PM=1" -DCATCHINT06=1 -DDRIVER=1 $(AS2)
+
+
+
