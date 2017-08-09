@@ -50,6 +50,10 @@
 ;       - allow to modify floating point registers
 ;       - better syntax checks for A (so i.e. "mov ax,al" is rejected)
 
+
+;-- sava: patch level
+PATCHLEVEL equ 'p1-20170809'
+
 ;--- check the target
 ifndef GENERIC
   ifndef IBMPC
@@ -11607,7 +11611,11 @@ endif
 ;--- Debug initialization code.
 ;---------------------------------------
 
-imsg1	db DBGNAME,' version 1.25p1.  Debugger.'
+imsg1	db DBGNAME,' version 1.25'
+ifdef PATCHLEVEL
+	db PATCHLEVEL
+endif
+	db '.  Debugger.'
 ifdef IBMPC
 	db ' (for IBMPC)'
 endif
