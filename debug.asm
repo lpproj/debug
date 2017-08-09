@@ -491,6 +491,8 @@ con_count	dw ?
 endif
 dos_version     dw ?	; upper = major, lower = minor
 int2f_hopper	dw offset int2f_caller
+org_SI		dw ?
+org_BP		dw ?
 ifdef NEC98
 ;-- check machine (PC) type
 ;     0   not checked
@@ -5179,7 +5181,11 @@ callvddread:
 	jmp ll0_2
 endif
 ll0_1:
+	mov cs:[org_SI],si
+	mov cs:[org_BP],bp
 	int 25h
+	mov bp,cs:[org_BP]
+	mov si,cs:[org_SI]
 ll0_2:
 	mov dx,offset reading
 	jmp ww1
@@ -7068,7 +7074,11 @@ callvddwrite:
 	jmp ww0_2
 endif
 ww0_1:
+	mov cs:[org_SI],si
+	mov cs:[org_BP],bp
 	int 26h
+	mov bp,cs:[org_BP]
+	mov si,cs:[org_SI]
 ww0_2:
 	mov dx,offset writing
 ww1::				;<--- entry from ll
