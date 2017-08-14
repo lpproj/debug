@@ -276,7 +276,7 @@ interrupt:
 	mov [di].req_hdr.status,8103h
 	pop di
 	pop ds
-	ret
+	retf
 else
 
 	org 100h
