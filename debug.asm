@@ -11993,6 +11993,10 @@ if DRIVER eq 0
 	je @B
 	cmp al,TAB
 	je @B
+ifndef IBMPC
+	cmp al,0
+	je @B
+endif ;IBMPC
 
 ;--- Process the /? switch (or the [switchar]? switch).
 ;--- If switchar != / and /? occurs, make sure nothing follows.
