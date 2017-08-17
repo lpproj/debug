@@ -52,7 +52,7 @@
 
 
 ;-- sava: patch level
-PATCHLEVEL equ 'p1-20170809'
+PATCHLEVEL equ 'p1-20170817'
 
 ;--- check the target
 ifndef GENERIC
