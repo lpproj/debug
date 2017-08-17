@@ -57,6 +57,10 @@ generic$(P)debug.com: debug.asm $(INCS)
 generic$(P)debugx.com: debug.asm $(INCS)
 	$(AS) $(ASFLAGS) -bin -DGENERIC "-D?PM=1" $(AS2)
 
+generic$(P)debugxg.exe: debug.asm $(INCS)
+	$(AS) $(ASFLAGS) -mz -DGENERIC "-D?PM=1" -DCATCHINT06=0 -DDRIVER=1 $(AS2)
+
+
 
 #
 
